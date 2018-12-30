@@ -1,0 +1,66 @@
+#!/bin/sh
+#
+# Goorm.io Initialization Script V3 181205
+#
+# Installed Services 
+# - TigerVNCServer v1.9.0 for Ubuntu 14.04 LTS
+# - GNOME Core + xorg
+# - Korean language support
+# - Nanum Fonts
+
+echo "사용자 이름을 입력해주세요. 입력 후 [ENTER]: "
+read USERNAME
+
+echo "APT 레포지토리 업데이트 중..."
+apt-get -qq update
+
+echo "기존 tightvncserver 삭제 및 tigervncserver 설치 중..."
+apt-get -qq --purge -y autoremove tightvncserver
+wget -q "https://bintray.com/tigervnc/stable/download_file?file_path=ubuntu-14.04LTS%2Famd64%2Ftigervncserver_1.9.0-3ubuntu1_amd64.deb" -O "tigervncserver_1.9.0-3ubuntu1_amd64.deb"
+dpkg --log=/dev/null -i tigervncserver_1.9.0-3ubuntu1_amd64.deb
+rm tigervncserver_1.9.0-3ubuntu1_amd64.deb
+
+echo "tigervncserver 필요한 파일들 설치 중..."
+apt-get -qq -f -y install
+
+echo "사용자를 생성합니다."
+adduser $USERNAME
+usermod -aG sudo $USERNAME
+
+echo -e "\nLANG=\"ko_KR.UTF-8\"\nLANGUAGE=\"ko:en\"" > /etc/default/locale
+echo -e "\nLANG=\"ko_KR.UTF-8\"\nLANGUAGE=\"ko:en\"" > /home/$USERNAME/.pam_environment
+ln -sf /usr/share/zoneinfo/Asia/Seoul /etc/localtime
+
+echo "VNC 설정 정하는 중..."
+
+# Configure VNC Server to run with port 5900
+su -c "vncserver :0" $USERNAME
+su -c "vncserver -kill :0" $USERNAME > /dev/null
+
+echo "/usr/bin/startlxde" > /home/$USERNAME/xstartup
+chown $USERNAME.$USERNAME /home/$USERNAME/xstartup
+chmod +x /home/$USERNAME/xstartup
+
+echo "GNOME GUI 설치하는 중..."
+apt-get install xorg gnome-core gnome-system-tools gnome-app-install
+
+echo "한국어 입력 및 각종 프로그램 설치 중..."
+apt-get -qq -y install fcitx fcitx-hangul
+
+echo "한글 폰트 및 한국어 지원 설치하는 중..."
+apt-get -qq -y install fonts-nanum fonts-nanum-* language-selector-common
+apt-get -qq -y install `check-language-support -l ko`
+
+echo "wineHQ-stable 설치하는 중..."
+sudo dpkg --add-architecture i386
+wget -nc https://dl.winehq.org/wine-builds/Release.key
+sudo apt-key add Release.key
+sudo apt-add-repository https://dl.winehq.org/wine-builds/ubuntu/
+sudo apt update
+sudo apt install --install-recommends winehq-stable
+
+# Configure noVNC server
+echo "novnc 서버 설정 및 잔여 파일 제거 중..."
+git clone https://github.com/novnc/noVNC.git /usr/local/novnc > /dev/null
+echo -e '#!/bin/bash\nrm -rf /tmp/.X0-lock /tmp/.X11-unix\n\nsu -c "vncserver :0" $USERNAME\n/usr/local/novnc/utils/launch.sh --listen 80 --vnc localhost:5900 --web /usr/local/novnc/' > /root/init
+chmod +x /root/init
